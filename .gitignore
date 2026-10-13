@@ -1,0 +1,24 @@
+# R
+.Rhistory
+.RData
+.Rproj.user/
+*.Rproj
+
+# 大文件与运行产物（保留表格与图，排除对象与原始数据）
+results/rds/
+results/big/
+*.h5
+*.h5ad
+*.tsv.gz
+*.tbi
+*.fastq*
+*.bam
+*.bai
+
+# renv
+renv/
+!renv.lock
+
+# 系统
+.DS_Store
+*.swp
