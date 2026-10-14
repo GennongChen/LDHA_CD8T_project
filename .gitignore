@@ -18,6 +18,8 @@ results/big/
 # renv
 renv/
 !renv.lock
+renv_lib/
+.renv_cache/
 
 # 系统
 .DS_Store

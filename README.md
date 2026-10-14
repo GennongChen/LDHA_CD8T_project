@@ -1,6 +1,8 @@
 # LDHA_CD8T_project
 
-LDHA 扰动（LDHA perturbation）条件下 CD8 T 细胞的单细胞多组学（scMultiome: snRNA-seq + scATAC-seq）分析。
+LDHA 过表达（OE）与对照（CTRL）CD8 CAR-T 细胞的单细胞 RNA + ATAC 分析。
+
+本批次每组只有一个生物学样本。条件与样本完全重合；条件间差异检验及富集结果只用于探索，不能据此推断可重复的 LDHA 因果效应。
 
 分析流程改编自 [CTSD_CD8T_project/CART_snRNAATACseq](https://github.com/GennongChen/CTSD_CD8T_project/tree/main/CART_snRNAATACseq)（Signac + Seurat WNN + chromVAR + Pando GRN）。
 
@@ -38,9 +40,10 @@ LDHA_CD8T_project/
 ## 快速开始（Codex）
 
 ```bash
-# 1. clone 后在项目根目录，使用 mamba 环境 atac
-/home/chengennong/tools/mambaforge/envs/atac/bin/Rscript -e 'renv::init()'   # 首次
-# 2. 按服务器实际路径修改 config/paths_config.R
-# 3. 按顺序运行 scripts/01 -> 08，每阶段结束 commit + push
+# 1. 在项目根目录，使用 mamba 环境 atac
+# 2. 输入为 ../data/matrix 下每组独立的 RNA/ATAC Matrix Market 目录，
+#    以及 ../data/fragments 下对应的 fragments 文件；见 config/paths_config.R
+# 3. 按顺序运行 scripts/00 -> 08，每阶段核查结果后继续
+/home/chengennong/tools/mambaforge/envs/atac/bin/Rscript scripts/00_environment.R
 /home/chengennong/tools/mambaforge/envs/atac/bin/Rscript scripts/01_preprocess_qc.R
 ```
