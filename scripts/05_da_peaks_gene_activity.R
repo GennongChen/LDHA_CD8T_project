@@ -1,4 +1,4 @@
-#!/usr/bin/env Rscript
+#!/home/chengennong/tools/mambaforge/envs/atac/bin/Rscript
 # Exploratory ATAC differential accessibility and peak-to-gene associations.
 # There is one biological sample per condition; cell-level p values are not
 # evidence of a reproducible LDHA effect.

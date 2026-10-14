@@ -1,4 +1,4 @@
-#!/usr/bin/env Rscript
+#!/home/chengennong/tools/mambaforge/envs/atac/bin/Rscript
 # Pilot Pando GRNs with a bounded number of cells and target genes.
 # With one sample per condition, network contrasts remain exploratory.
 source("config/paths_config.R")

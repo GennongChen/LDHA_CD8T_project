@@ -1,4 +1,4 @@
-#!/usr/bin/env Rscript
+#!/home/chengennong/tools/mambaforge/envs/atac/bin/Rscript
 # One biological sample per condition: every cell-level test below is
 # exploratory. No pseudobulk hypothesis test is valid with n=1 per group.
 source("config/paths_config.R")
