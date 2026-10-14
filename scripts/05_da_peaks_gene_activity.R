@@ -1,64 +1,114 @@
-#!/home/chengennong/tools/mambaforge/envs/atac/bin/Rscript
-# =====================================================================
-# 05_da_peaks_gene_activity.R — DA peaks + peak-gene links + GeneActivity（Phase 05）
-# 输入: results/rds/04_chromvar.rds
-# 输出: results/rds/05_geneact.rds
-#       results/tables/05_DE_peaks.csv, 05_DE_peak_gene.csv
-#       figures/05_heatmap_geneact.pdf, 05_heatmap_gex.pdf, 05_heatmap_motif.pdf
-# 修复项 B2: 删除参考代码中未定义的 up_links 引用
-# 修复项: anno_mark 前对高亮基因 trimws 并校验 match 成功
-# =====================================================================
-set.seed(SEED)
+#!/usr/bin/env Rscript
+# Exploratory ATAC differential accessibility and peak-to-gene associations.
+# There is one biological sample per condition; cell-level p values are not
+# evidence of a reproducible LDHA effect.
 source("config/paths_config.R")
-library(Seurat); library(Signac); library(tidyverse)
-library(ComplexHeatmap); library(circlize)
+set.seed(SEED)
+suppressPackageStartupMessages({
+  library(Seurat)
+  library(Signac)
+  library(dplyr)
+  library(ComplexHeatmap)
+})
+final_cache <- file.path(OUT_DIR, "rds", "05_geneact.rds")
+if (file.exists(final_cache)) {
+  combined <- readRDS(final_cache)
+} else {
+combined <- readRDS(file.path(OUT_DIR, "rds", "04_chromvar_prefootprint.rds"))
 
-combined <- readRDS(file.path(OUT_DIR, "rds", "04_chromvar.rds"))
-
-# ---- DA peaks（LR 检验，校正 ATAC 深度）----
 DefaultAssay(combined) <- "ATAC"
-da_peaks <- FindMarkers(combined, ident.1 = COND_KO, ident.2 = COND_CTRL,
-                        group.by = "Condition", only.pos = FALSE,
-                        test.use = DA_TEST, min.pct = 0.05, latent.vars = DA_LATENT)
-da_peaks$peak <- rownames(da_peaks)
-write.csv(da_peaks, file.path(OUT_DIR, "tables", "05_DE_peaks.csv"), row.names = FALSE)
+da_path <- file.path(OUT_DIR, "tables", "05_DE_peaks.csv")
+if (file.exists(da_path)) {
+  da_peaks <- read.csv(da_path)
+  stopifnot(nrow(da_peaks) > 0, all(c("peak", "p_val_adj", "avg_log2FC") %in% names(da_peaks)))
+} else {
+  da_peaks <- FindMarkers(
+    combined, ident.1 = COND_OE, ident.2 = COND_CTRL,
+    group.by = "Condition", only.pos = FALSE, test.use = DA_TEST,
+    min.pct = 0.05, latent.vars = DA_LATENT
+  )
+  da_peaks$peak <- rownames(da_peaks)
+  write.csv(da_peaks, da_path, row.names = FALSE)
+}
 
-# ---- peak-gene links（修复 B2：只用 peak_links，无 up_links）----
-peak_links <- Links(combined)[Links(combined)$peak %in% rownames(da_peaks), ]
-peak_links_df <- as.data.frame(peak_links)
-da_peak_gene <- inner_join(da_peaks, peak_links_df, by = "peak")
+# Restrict links to RNA variable genes to keep computation bounded and
+# explicitly record the tested gene set.
+genes_to_link <- intersect(VariableFeatures(combined[["RNA"]]), rownames(combined[["RNA"]]))
+writeLines(genes_to_link, file.path(OUT_DIR, "tables", "05_linked_genes.txt"))
+links_cache <- file.path(OUT_DIR, "rds", "05_linked.rds")
+if (file.exists(links_cache)) {
+  combined <- readRDS(links_cache)
+} else {
+  combined <- LinkPeaks(combined, peak.assay = "ATAC", expression.assay = "RNA",
+                        genes.use = genes_to_link, n_sample = 200)
+  saveRDS(combined, links_cache)
+}
+peak_links <- as.data.frame(Links(combined[["ATAC"]]))
+stopifnot(all(c("peak", "gene") %in% colnames(peak_links)))
+da_peak_gene <- dplyr::inner_join(da_peaks, peak_links, by = "peak")
 write.csv(da_peak_gene, file.path(OUT_DIR, "tables", "05_DE_peak_gene.csv"), row.names = FALSE)
 
-# ---- GeneActivity ----
 gene.activities <- GeneActivity(combined, assay = "ATAC",
                                 extend.upstream = 2000, extend.downstream = 0)
 combined[["geneact"]] <- CreateAssayObject(counts = gene.activities)
-combined <- NormalizeData(combined, assay = "geneact", normalization.method = "LogNormalize",
-                          scale.factor = median(combined$nCount_geneact), verbose = FALSE)
-combined <- ScaleData(combined, assay = "geneact", verbose = FALSE)
-
-# ---- 热图（geneact / GEX / motif），高亮基因先 trimws + 校验 ----
-make_hilight_anno <- function(genes, mat) {
-  genes <- trimws(genes)
-  idx <- match(genes, rownames(mat))
-  stopifnot("高亮基因未全部匹配到矩阵行" = !any(is.na(idx)))
-  rowAnnotation(foo = anno_mark(at = idx, labels = rownames(mat)[idx],
-                               labels_gp = gpar(fontsize = 10)))
+combined <- NormalizeData(combined, assay = "geneact", verbose = FALSE)
+saveRDS(combined, final_cache)
 }
-# TODO(Codex): 三张热图的具体 top marker 选择与配色沿用参考代码逻辑，
-# 按 celltype 取 top60（presto），DotPlot 取 avg.exp.scaled 后 pivot_wider 成矩阵。
-# 此处仅给 geneact 热图骨架，GEX/motif 热图同构：
-DefaultAssay(combined) <- "geneact"
-Idents(combined) <- "celltype"
-markers_geneact <- presto:::wilcoxauc.Seurat(combined, group_by = "celltype",
-                                             assay = "data", seurat_assay = "geneact")
-top_markers <- markers_geneact |> filter(pct_in > 0.5) |>
-  group_by(group) |> slice_max(n = 60, order_by = logFC) |> pull(feature) |> unique()
-mat <- GetAssayData(combined, assay = "geneact", slot = "scale.data")[top_markers, ]
-# TODO(Codex): 补齐 DotPlot->pivot_wider 的簇均值矩阵（参考 scMultiome.R 950-990 行）
-# heat <- Heatmap(mat, name = "GeneActivity (Z-score)", ...)
-# pdf(file.path(FIG_DIR, "05_heatmap_geneact.pdf")); draw(heat); dev.off()
 
-saveRDS(combined, file.path(OUT_DIR, "rds", "05_geneact.rds"))
+make_heatmap <- function(assay, label, top_n = 15L) {
+  DefaultAssay(combined) <- assay
+  markers <- presto::wilcoxauc(combined, group_by = "celltype",
+                               assay = "data", seurat_assay = assay)
+  top <- markers |>
+    dplyr::filter(padj < 0.05, logFC > 0, pct_in > 10) |>
+    dplyr::group_by(group) |>
+    dplyr::slice_max(order_by = auc, n = top_n, with_ties = FALSE) |>
+    dplyr::pull(feature) |>
+    unique()
+  if (length(top) < 2) {
+    top <- markers |>
+      dplyr::group_by(group) |>
+      dplyr::slice_max(order_by = auc, n = top_n, with_ties = FALSE) |>
+      dplyr::pull(feature) |>
+      unique()
+  }
+  top <- intersect(top, rownames(combined[[assay]]))
+  if (assay == "chromvar") {
+    # chromVAR data are deviation Z scores, not log expression. Average
+    # them directly; AverageExpression() would incorrectly exponentiate them.
+    values <- GetAssayData(combined, assay = assay, layer = "data")
+    groups <- factor(combined$celltype)
+    mat <- do.call(cbind, lapply(levels(groups), function(g) {
+      Matrix::rowMeans(values[top, which(groups == g), drop = FALSE])
+    }))
+    rownames(mat) <- top
+    colnames(mat) <- levels(groups)
+  } else {
+    avg <- AverageExpression(combined, assays = assay, features = top,
+                             group.by = "celltype", layer = "data",
+                             verbose = FALSE)[[assay]]
+    mat <- as.matrix(avg)
+  }
+  mat <- t(scale(t(mat)))
+  mat[!is.finite(mat)] <- 0
+  labels <- if (assay == "chromvar") {
+    make.unique(ConvertMotifID(combined, id = rownames(mat), assay = "ATAC"))
+  } else rownames(mat)
+  feature_table <- data.frame(feature = rownames(mat), label = labels)
+  rownames(mat) <- labels
+  pdf(file.path(FIG_DIR, paste0("05_heatmap_", label, ".pdf")),
+      width = 12, height = max(7, min(20, nrow(mat) * 0.28)))
+  draw(Heatmap(mat, name = "row Z", show_row_names = nrow(mat) <= 80,
+               row_names_gp = grid::gpar(fontsize = 8),
+               column_title = paste(assay, "average by CD8 state")))
+  dev.off()
+  write.csv(feature_table,
+            file.path(OUT_DIR, "tables", paste0("05_heatmap_", label, "_features.csv")),
+            row.names = FALSE)
+}
+make_heatmap("geneact", "geneact", top_n = 8L)
+make_heatmap("RNA", "gex", top_n = 8L)
+make_heatmap("chromvar", "motif", top_n = 5L)
+
 writeLines(capture.output(sessionInfo()),
            file.path(OUT_DIR, "sessionInfo", "05_da_peaks_gene_activity.txt"))
