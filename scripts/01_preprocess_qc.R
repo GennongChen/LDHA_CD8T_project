@@ -70,12 +70,20 @@ message("Common peaks: ", length(peaks))
 for (s in names(obj_list)) {
   obj <- obj_list[[s]]
   cache <- file.path(OUT_DIR, "rds", paste0("01_common_peaks_", s, ".rds"))
-  if (file.exists(cache)) {
+  key_file <- paste0(cache, ".key")
+  key <- digest::digest(list(peaks = as.character(peaks), cells = colnames(obj)))
+  use_cache <- file.exists(cache) && file.exists(key_file) &&
+    identical(readLines(key_file, warn = FALSE), key)
+  if (use_cache) {
     counts <- readRDS(cache)
-  } else {
+    use_cache <- nrow(counts) == length(peaks) &&
+      identical(colnames(counts), colnames(obj))
+  }
+  if (!use_cache) {
     counts <- FeatureMatrix(fragments = Fragments(obj[["ATAC"]]),
                             features = peaks, cells = colnames(obj), verbose = TRUE)
     saveRDS(counts, cache)
+    writeLines(key, key_file)
   }
   stopifnot(identical(colnames(counts), colnames(obj)))
   obj[["ATAC"]] <- CreateChromatinAssay(
