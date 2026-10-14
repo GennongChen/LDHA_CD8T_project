@@ -19,3 +19,8 @@ Cluster 6 has higher RNA depth; some cell-cycle marker enrichment may partly
 reflect its higher UMI count. The complete marker scores and cluster QC are in
 `results/tables/03_state_gene_markers.csv` and
 `results/tables/03_cluster_qc.csv`.
+
+LDHA RNA signal is only modestly higher in OE in the retained cells: mean
+log-normalized expression 0.954 versus 0.861 in CTRL, with detection in
+65.8% versus 64.8% of cells. This alone does not verify overexpression
+efficiency; see `results/tables/03_LDHA_expression.csv`.
