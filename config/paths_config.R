@@ -53,3 +53,5 @@ DA_LATENT <- "nCount_ATAC"
 LOGFC_CUT <- 0.25
 PADJ_CUT <- 0.05
 MODULES_FILE <- file.path(PROJECT_DIR, "config", "gene_modules.txt")
+N_PANDO <- 2000L
+N_PANDO_GENES <- 500L
