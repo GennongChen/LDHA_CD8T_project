@@ -32,7 +32,17 @@ SEED <- 123L
 RES_WNN <- 0.1
 PCA_DIMS <- 1:30
 LSI_DIMS <- 2:30
-celltype_map <- c()
+# Exploratory CD8 states from phase-03 RNA markers; suffix preserves WNN cluster.
+celltype_map <- c(
+  "0" = "IL7R_like_0",
+  "1" = "Cytotoxic_1",
+  "2" = "IL7R_like_2",
+  "3" = "Cytotoxic_NR4A2_3",
+  "4" = "Activated_IEG_4",
+  "5" = "Cytotoxic_NR4A2_5",
+  "6" = "Cycling_6",
+  "7" = "Cytotoxic_7"
+)
 # Empirical cutoffs from 01_qc_metrics_before.csv: both samples have
 # median mitochondrial fractions above 20%; 30% retains ~65-69% of cells.
 QC <- list(nCount_ATAC_min = 500, nCount_ATAC_max = 50000,

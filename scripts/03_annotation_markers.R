@@ -7,18 +7,25 @@
 #       figures/03_dotplot_markers.pdf, 03_proportion.pdf, 03_featureplot.pdf
 # 修复项: 簇→细胞类型映射从 config$celltype_map 读取（禁止硬编码 levels）
 # =====================================================================
-set.seed(SEED)
 source("config/paths_config.R")
+set.seed(SEED)
 library(Seurat); library(Signac); library(tidyverse)
 
 combined <- readRDS(file.path(OUT_DIR, "rds", "02_wnn.rds"))
+DefaultAssay(combined) <- "RNA"
 cluster_col <- paste0("wsnn_res", RES_WNN)
 Idents(combined) <- cluster_col
 
 # ---- marker（presto）----
 markers <- presto::wilcoxauc(combined, group_by = cluster_col,
                              assay = "data", seurat_assay = "RNA")
-write.csv(markers, file.path(OUT_DIR, "tables", "03_markers_clusters.csv"), row.names = FALSE)
+saveRDS(markers, file.path(OUT_DIR, "big", "03_markers_all.rds"))
+top_markers <- markers |>
+  dplyr::filter(padj < 0.05, logFC > 0) |>
+  dplyr::group_by(group) |>
+  dplyr::slice_max(order_by = auc, n = 100, with_ties = FALSE) |>
+  dplyr::ungroup()
+write.csv(top_markers, file.path(OUT_DIR, "tables", "03_markers_clusters.csv"), row.names = FALSE)
 
 # ---- CD8 T 状态基因 dotplot ----
 state_genes <- c("CD8A","KLF2","LEF1","TCF7","IL7R",          # naive/stem
@@ -27,12 +34,26 @@ state_genes <- c("CD8A","KLF2","LEF1","TCF7","IL7R",          # naive/stem
                  "CXCL13","TOX2","ENTPD1",                     # exhausted
                  "NR4A1","NR4A2","HIF1A","LDHA","HK2","SLC16A3") # activation/糖酵解
 state_genes <- intersect(state_genes, rownames(combined))
+state_stats <- markers |>
+  dplyr::filter(feature %in% state_genes) |>
+  dplyr::select(group, feature, logFC, pct_in, auc, padj)
+write.csv(state_stats, file.path(OUT_DIR, "tables", "03_state_gene_markers.csv"), row.names = FALSE)
+cluster_qc <- do.call(rbind, lapply(split(combined[[]], combined[[cluster_col]][, 1]),
+                                   function(m) data.frame(
+                                     cluster = as.character(m[[cluster_col]][1]),
+                                     cells = nrow(m),
+                                     fraction_OE = mean(m$Condition == COND_OE),
+                                     median_RNA = median(m$nCount_RNA),
+                                     median_ATAC = median(m$nCount_ATAC),
+                                     median_percent_mt = median(m$percent.mt))))
+write.csv(cluster_qc, file.path(OUT_DIR, "tables", "03_cluster_qc.csv"), row.names = FALSE)
 p_dot <- DotPlot(combined, group.by = cluster_col, features = state_genes,
                  cols = c("lightgrey", "#CD534CFF"), dot.scale = 6) + RotatedAxis()
 ggsave(file.path(FIG_DIR, "03_dotplot_markers.pdf"), p_dot, width = 12, height = 5)
 
 # ---- 注释：映射表来自 config，人工确认后填写 ----
 if (length(celltype_map) == 0) stop("请先看 marker 图，在 config/paths_config.R 填写 celltype_map 后重跑")
+stopifnot(setequal(names(celltype_map), levels(Idents(combined))))
 combined$celltype <- factor(as.character(combined@meta.data[[cluster_col]]),
                             levels = names(celltype_map), labels = celltype_map)
 stopifnot(!any(is.na(combined$celltype)))  # 每个簇都必须有映射
