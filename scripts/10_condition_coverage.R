@@ -10,6 +10,8 @@ suppressPackageStartupMessages({
 
 combined <- readRDS(file.path(OUT_DIR, "rds", "05_geneact.rds"))
 DefaultAssay(combined) <- "ATAC"
+coverage_dir <- file.path(FIG_DIR, "10_coverage")
+dir.create(coverage_dir, recursive = TRUE, showWarnings = FALSE)
 stopifnot(length(Fragments(combined[["ATAC"]])) == 2L,
           length(Annotation(combined[["ATAC"]])) > 0L,
           all(c(COND_CTRL, COND_OE) %in% unique(as.character(combined$Condition))))
@@ -133,9 +135,10 @@ stopifnot(all(markers$gene %in% annotation_genes),
                 markers$rna_feature %in% rownames(combined[["RNA"]])),
           !anyDuplicated(markers$gene))
 markers$figure <- vapply(seq_len(nrow(markers)), function(i) {
-  if (markers$category[i] == "Target") {
+  basename <- if (markers$category[i] == "Target") {
     sprintf("10_coverage_Target_%s_%s.pdf", markers$tf[i], markers$gene[i])
   } else sprintf("10_coverage_%s_%s.pdf", markers$category[i], markers$gene[i])
+  file.path("10_coverage", basename)
 }, character(1))
 message("Coverage plan: ", nrow(markers), " unique loci, including ",
         sum(markers$category == "Target"), " TF target candidates")
@@ -182,7 +185,7 @@ for (i in seq_len(nrow(markers))) {
   ggsave(file.path(FIG_DIR, filename), p, width = 11, height = 6.8)
 }
 
-figures <- sort(basename(list.files(FIG_DIR, pattern = "\\.pdf$")))
+figures <- sort(list.files(FIG_DIR, pattern = "\\.pdf$", recursive = TRUE))
 write.csv(data.frame(figure = figures),
           file.path(OUT_DIR, "tables", "figure_index.csv"), row.names = FALSE)
 writeLines(sub("[[:space:]]+$", "", capture.output(sessionInfo())),

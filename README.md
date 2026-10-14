@@ -33,7 +33,7 @@ LDHA_CD8T_project/
 │   ├── 09_cross_modal_volcano.R
 │   └── 10_condition_coverage.R
 ├── results/                   # 表格及本地 RDS 缓存；大 RDS 不入库
-└── figures/                   # PDF 图表
+└── figures/                   # PDF 图表；第 10 阶段见 figures/10_coverage/
 ```
 
 ## 工作分工与分支

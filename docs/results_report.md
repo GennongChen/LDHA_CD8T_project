@@ -38,6 +38,8 @@ RNA 图中 OE 较高 219 个、CTRL 较高 721 个；gene activity 图中分别�
 
 ## Coverage 与候选靶基因
 
+全部 coverage PDF 集中保存在 `figures/10_coverage/`，文件名和相对路径见 [coverage 位点表](../results/tables/10_coverage_markers.csv)。
+
 第 10 阶段的 `CoveragePlot` 明确使用 `expression.assay = "RNA"`，按 CTRL 与 OE 显示 ATAC fragment coverage、peak 注释和相应 RNA 表达轨道。位点包括效应、增殖和静息记忆基因，以及第 03 阶段 marker dot/feature 图、第 05 阶段 RNA/gene activity 热图和第 09 阶段火山图标注的单基因；按用户要求排除了 AAVS1 与 LDHA coverage，并重画 GZMB、IFNG、PRF1。复合 motif 不对应唯一 RNA 位点，仅纳入能与 RNA 基因精确匹配的 TF。gene activity 热图中的三个基因（RP11-12J10.3、AL031664.1、MTRNR2L1）在 RNA 矩阵中不存在，故只画 ATAC coverage，并在图中注明。六个指定 TF（ELF4、MEF2D、ETV6、PPARD、KLF3、PBX2）各增加两个候选靶基因：候选基因要求其附近 peak 同时命中该 TF motif 并具有 Signac peak–gene link，图中以阴影标记该 peak。每个图的来源和候选 link 统计量见 [coverage 位点表](../results/tables/10_coverage_markers.csv)。这些数据支持“候选关联”，不能证明直接调控。
 
 共有 7 个已画 marker（LINC01115.1、TRBV3-1、TRBV19、TARP、LINC02694、TRBV29-1、TRD-AS1）缺少本次 ATAC 对象中的基因注释，无法可靠定位 coverage 图。另有 3 个线粒体基因（MT-ND2、MT-CO2、MT-ND4L）在本次 ATAC 数据中没有可用的 fragment coverage，未生成对应图；详见 [跳过表](../results/tables/10_coverage_skipped.csv)。
