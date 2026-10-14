@@ -29,7 +29,8 @@ LDHA_CD8T_project/
 │   ├── 05_da_peaks_gene_activity.R
 │   ├── 06_de_enrichment.R
 │   ├── 07_grn_pando.R
-│   └── 08_grn_vis.R
+│   ├── 08_grn_vis.R
+│   └── 09_cross_modal_volcano.R
 ├── results/                   # 表格及本地 RDS 缓存；大 RDS 不入库
 └── figures/                   # PDF 图表
 ```
@@ -55,6 +56,7 @@ LDHA_CD8T_project/
 /home/chengennong/tools/mambaforge/envs/atac/bin/Rscript scripts/06_de_enrichment.R
 /home/chengennong/tools/mambaforge/envs/atac/bin/Rscript scripts/07_grn_pando.R
 /home/chengennong/tools/mambaforge/envs/atac/bin/Rscript scripts/08_grn_vis.R
+/home/chengennong/tools/mambaforge/envs/atac/bin/Rscript scripts/09_cross_modal_volcano.R
 ```
 
-截至 2026-10-14，Codex 已完成 00–08 阶段并将代码、结果表和 PDF 图推送到 `codex/main`。结果摘要见 [docs/results_report.md](docs/results_report.md)，全部图表见 [figure_index.csv](results/tables/figure_index.csv)。中间 RDS 只保存在分析服务器；若输入数据或参数变化，需清除相应阶段的缓存 RDS 后重跑。独立 Biomni 复核与合并到 `main` 尚未进行。
+截至 2026-10-14，Codex 已完成 00–09 阶段。第 09 阶段绘制 RNA、gene activity、motif 火山图，以及 TF RNA 与 motif 变化的散点图；motif 的横轴为 chromVAR 偏离分数均值差，并非 log2 fold change。结果摘要见 [docs/results_report.md](docs/results_report.md)，全部图表见 [figure_index.csv](results/tables/figure_index.csv)。中间 RDS 只保存在分析服务器；若输入数据或参数变化，需清除相应阶段的缓存 RDS 后重跑。独立 Biomni 复核与合并到 `main` 尚未进行。

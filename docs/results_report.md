@@ -28,6 +28,14 @@ Seurat 单细胞检验在表达与 fold-change 过滤后评估 5,345 个基因�
 
 Pando 作为有界试运行，每套网络最多使用 2,000 个细胞，请求 511 个靶基因，其中 371 个进入模型拟合。合并、CTRL、OE 网络分别报告 80、46、88 个 TF 模块。合并网络的聚焦结果包含 33 行达到模型阈值的记录，涉及 FOS、JUN、NFKB1、REL、BATF、KLF2 和 TOX2；所选阈值下没有 HIF1A 边。网络图对每个 TF–靶基因对显示最显著的一条边，[完整聚焦边表](../results/tables/08_grn_focused_edges.csv)保留全部 33 行。条件网络间的差别可能由样本、下采样和模型选择造成，不能归因于 LDHA。
 
+## RNA、gene activity 与 motif 火山图
+
+第 09 阶段以 `min.pct = 0.05`、`logfc.threshold = 0` 重新计算完整的 RNA 和 gene activity 单细胞 Wilcoxon 差异表，分别覆盖 8,160 和 13,126 个基因。motif 图覆盖 633 个 JASPAR motif，使用 chromVAR deviation Z 分数的 OE−CTRL 均值差；它与原 presto 表中的 `logFC` 数值一致，但**不是 log2 fold change**，因为 deviation 分数可以为负。三图均以校正后 p < 0.05 和效应阈值着色（RNA 与 gene activity 的 |log2FC| ≥ 0.25；motif 的 |分数差| ≥ 0.25），每个方向标注校正后 p 最小的五个不同基因或 TF，并额外标注 RNA 和 gene activity 中的 LDHA。图上 −log10 校正后 p 值封顶于 50，避免数值下溢和极小 p 值挤占画面。
+
+RNA 图中 OE 较高 219 个、CTRL 较高 721 个；gene activity 图中分别为 4,455 和 1,388 个；motif 图中分别为 148 和 32 个。LDHA RNA log2FC 为 0.220，gene activity log2FC 为 0.147，均低于着色效应阈值。gene activity 的大范围差异尤其可能受到两组 ATAC 测序深度差异影响。相关图见 [RNA 火山图](../figures/09_volcano_RNA.pdf)、[gene activity 火山图](../figures/09_volcano_geneact.pdf)、[motif 火山图](../figures/09_volcano_motif.pdf)；对应全量表和标注记录以 `09_` 为前缀保存在 `results/tables/`。
+
+[RNA × motif 图](../figures/09_RNA_x_motif_logFC.pdf)比较 TF 基因的 RNA log2FC 与相同 TF motif 的 chromVAR 分数差。精确基因名匹配后保留 182 个 TF；一个 TF 对应多个 JASPAR motif 时，选校正后 p 最小者，再按绝对效应排序。两种细胞级校正后 p 均 < 0.05 的 TF 中，方向一致 12 个、相反 16 个；各组按两种绝对效应的乘积标注前六个。详细结果与所选 motif ID 见 [RNA × motif 表](../results/tables/09_RNA_x_motif.csv)。RNA 与 motif 的方向一致性只是相关描述，不能证明 TF 活性或 LDHA 调控作用。
+
 ## 复现与后续验证
 
 分析代码位于 `scripts/`，参数和数据路径位于 `config/paths_config.R`，R 版本与包版本见 `renv.lock`。结果表和 PDF 图已提交到仓库；较大的 RDS 保存在分析服务器的 `results/rds/` 和 `results/big/`。若需验证 LDHA 效应，应补充独立生物学重复，并用每样本汇总的 pseudobulk 或相应样本级模型分析；还需用独立实验确认 LDHA 过表达效率。
