@@ -1,74 +1,104 @@
-#!/home/chengennong/tools/mambaforge/envs/atac/bin/Rscript
-# =====================================================================
-# 01_preprocess_qc.R — 数据读入与 QC（CODEX_PLAN Phase 01）
-# 输入: config$samples 中每个样本的 10x multiome h5 + fragments
-# 输出: results/rds/01_combined_qc.rds
-#       results/tables/01_qc_summary.csv
-#       figures/01_qc_violin.pdf
-# 修复项（相对参考 scMultiome.R）:
-#   - 不再从预拼 rds 读入，直接读 10x 输出（如复用已有 rds 需在 config 注明）
-#   - ATAC 去 scaffold 用规范子集方法，不直接改 @counts slot
-#   - JoinLayers 不传 new.layer（Seurat 5 无此参数）
-# =====================================================================
-set.seed(SEED)
+#!/usr/bin/env Rscript
+# Reads separately delivered RNA and ATAC matrices, checks paired barcodes,
+# filters cells, then requantifies both fragment files on one common peak set.
 source("config/paths_config.R")
-
-library(Seurat); library(Signac); library(tidyverse)
-annotation <- GetGRangesFromEnsDb(ensdb = EnsDb.Hsapiens.v86)
-seqlevels(annotation) <- paste0("chr", seqlevels(annotation)) |> str_replace("^chrMT$", "chrM")
-
-# ---- 1. 逐样本读入 -----------------------------------------------------
-obj_list <- lapply(names(samples), function(s) {
-  info <- samples[[s]]
-  counts <- Read10x_h5(info$h5)
-  rna_obj <- CreateSeuratObject(counts = counts$`Gene Expression`, assay = "RNA")
-  rna_obj[["ATAC"]] <- CreateChromatinAssay(
-    counts = counts$`Peaks`,
-    sep = c(":", "-"),
-    fragments = info$fragments,
-    annotation = annotation
-  )
-  rna_obj$sample_id <- s
-  rna_obj$Condition <- info$condition
-  rna_obj
+set.seed(SEED)
+suppressPackageStartupMessages({
+  library(Seurat)
+  library(Signac)
+  library(GenomicRanges)
+  library(EnsDb.Hsapiens.v86)
 })
+
+annotation <- GetGRangesFromEnsDb(ensdb = EnsDb.Hsapiens.v86)
+GenomeInfoDb::seqlevels(annotation) <- sub("^chrMT$", "chrM",
+                                           paste0("chr", GenomeInfoDb::seqlevels(annotation)))
+
+read_sample <- function(label, info) {
+  message("Reading ", label)
+  rna <- Read10X(info$rna, gene.column = 2)
+  atac <- Read10X(info$atac, gene.column = 2)
+  stopifnot(identical(colnames(rna), colnames(atac)))
+  keep <- grepl("^chr([1-9]|1[0-9]|2[0-2]|X|Y):", rownames(atac))
+  atac <- atac[keep, , drop = FALSE]
+  obj <- CreateSeuratObject(rna, assay = "RNA", project = label)
+  obj[["ATAC"]] <- CreateChromatinAssay(
+    counts = atac, sep = c(":", "-"), fragments = info$fragments,
+    annotation = annotation, validate.fragments = FALSE
+  )
+  obj$sample_id <- label
+  obj$Condition <- info$condition
+  obj[["percent.mt"]] <- PercentageFeatureSet(obj, assay = "RNA", pattern = "^MT-")
+  obj
+}
+obj_list <- Map(read_sample, names(samples), samples)
 names(obj_list) <- names(samples)
 
-# ATAC 矩阵仅保留主染色体（规范子集，勿直接改 slot）
-obj_list <- lapply(obj_list, function(o) {
-  keep <- grep("^chr", rownames(o[["ATAC"]]), value = TRUE)
-  subset(o, features = keep)  # subset 同时作用于两个 assay 的共有特征需注意；
-                              # 若 RNA 基因被误删，改用 o[["ATAC"]] <- subset(o[["ATAC"]], features = keep)
-})
+qc_raw <- do.call(rbind, lapply(names(obj_list), function(s) {
+  m <- obj_list[[s]][[]]
+  data.frame(sample = s, nCount_RNA = m$nCount_RNA,
+             nCount_ATAC = m$nCount_ATAC, percent.mt = m$percent.mt)
+}))
+write.csv(qc_raw, file.path(OUT_DIR, "tables", "01_qc_metrics_before.csv"), row.names = FALSE)
+pdf(file.path(FIG_DIR, "01_qc_violin.pdf"), width = 12, height = 5)
+print(VlnPlot(obj_list[[1]], features = c("nCount_RNA", "nCount_ATAC", "percent.mt"),
+              pt.size = 0, ncol = 3) + ggplot2::ggtitle(names(obj_list)[1]))
+print(VlnPlot(obj_list[[2]], features = c("nCount_RNA", "nCount_ATAC", "percent.mt"),
+              pt.size = 0, ncol = 3) + ggplot2::ggtitle(names(obj_list)[2]))
+dev.off()
 
-# ---- 2. 合并 -----------------------------------------------------------
-combined <- merge(obj_list[[1]], obj_list[-1],
-                  add.cell.ids = names(obj_list), merge.data = TRUE)
-combined <- JoinLayers(combined, assay = "RNA")
-stopifnot(length(Layers(combined[["RNA"]], "counts")) == 1)  # 断言 counts 已合并
-
-combined[["percent.mt"]] <- PercentageFeatureSet(combined, pattern = "^MT-")
-
-# ---- 3. QC：先画图定阈值，再过滤 ---------------------------------------
-qc_before <- ncol(combined)
-p_qc <- VlnPlot(combined, features = c("nCount_RNA", "nCount_ATAC", "percent.mt"),
-                group.by = "sample_id", ncol = 3, pt.size = 0)
-ggsave(file.path(FIG_DIR, "01_qc_violin.pdf"), p_qc, width = 12, height = 4)
-# TODO(Codex): 查看 01_qc_violin.pdf，确认 config$QC 阈值适用于本数据后再运行下方 subset
-
-combined <- subset(combined,
-  subset = nCount_ATAC < QC$nCount_ATAC_max & nCount_ATAC > QC$nCount_ATAC_min &
-           nCount_RNA  < QC$nCount_RNA_max  & nCount_RNA  > QC$nCount_RNA_min &
-           percent.mt  < QC$percent_mt_max)
-
-qc_summary <- data.frame(
-  sample   = names(qc_before),
-  cells_before = as.integer(qc_before),
-  cells_after  = as.integer(table(combined$sample_id)[names(qc_before)])
-)
+qc_summary <- do.call(rbind, lapply(names(obj_list), function(s) {
+  obj <- obj_list[[s]]
+  m <- obj[[]]
+  keep <- m$nCount_ATAC >= QC$nCount_ATAC_min &
+    m$nCount_ATAC <= QC$nCount_ATAC_max &
+    m$nCount_RNA >= QC$nCount_RNA_min &
+    m$nCount_RNA <= QC$nCount_RNA_max &
+    m$percent.mt <= QC$percent_mt_max
+  obj_list[[s]] <<- subset(obj, cells = rownames(m)[keep])
+  data.frame(sample = s, cells_before = ncol(obj),
+             cells_after = sum(keep), retention = mean(keep))
+}))
 write.csv(qc_summary, file.path(OUT_DIR, "tables", "01_qc_summary.csv"), row.names = FALSE)
+stopifnot(all(qc_summary$cells_after > 100))
 
+# The two original peak lists have different coordinates. Using a union matrix
+# would make condition-specific absent peaks look like zero accessibility.
+peaks <- GenomicRanges::reduce(Reduce(c, lapply(obj_list, function(x) granges(x[["ATAC"]]))))
+peaks <- peaks[width(peaks) > 20 & width(peaks) < 10000]
+message("Common peaks: ", length(peaks))
+for (s in names(obj_list)) {
+  obj <- obj_list[[s]]
+  cache <- file.path(OUT_DIR, "rds", paste0("01_common_peaks_", s, ".rds"))
+  if (file.exists(cache)) {
+    counts <- readRDS(cache)
+  } else {
+    counts <- FeatureMatrix(fragments = Fragments(obj[["ATAC"]]),
+                            features = peaks, cells = colnames(obj), verbose = TRUE)
+    saveRDS(counts, cache)
+  }
+  stopifnot(identical(colnames(counts), colnames(obj)))
+  obj[["ATAC"]] <- CreateChromatinAssay(
+    counts = counts, ranges = peaks, fragments = Fragments(obj[["ATAC"]]),
+    annotation = annotation, min.cells = 0,
+    min.features = 0
+  )
+  obj_list[[s]] <- obj
+}
+
+combined <- merge(obj_list[[1]], y = obj_list[-1],
+                  add.cell.ids = names(obj_list), merge.data = FALSE)
+combined <- JoinLayers(combined, assay = "RNA")
+combined <- subset(combined, cells = colnames(combined)[
+  combined$nCount_ATAC >= QC$nCount_ATAC_min &
+    combined$nCount_ATAC <= QC$nCount_ATAC_max
+])
+qc_summary$cells_after_common_peaks <- as.integer(table(
+  factor(combined$sample_id, levels = qc_summary$sample)))
+write.csv(qc_summary, file.path(OUT_DIR, "tables", "01_qc_summary.csv"), row.names = FALSE)
+stopifnot(length(Layers(combined[["RNA"]], search = "counts")) == 1)
+stopifnot(ncol(combined) == sum(qc_summary$cells_after_common_peaks))
 saveRDS(combined, file.path(OUT_DIR, "rds", "01_combined_qc.rds"))
 writeLines(capture.output(sessionInfo()),
            file.path(OUT_DIR, "sessionInfo", "01_preprocess_qc.txt"))
-cat(sprintf("QC 完成: %d -> %d 细胞\n", sum(qc_before), ncol(combined)))
+message("QC complete: ", ncol(combined), " retained cells")
