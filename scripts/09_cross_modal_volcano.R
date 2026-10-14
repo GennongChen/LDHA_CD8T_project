@@ -130,14 +130,8 @@ shared$association <- ifelse(shared$rna_padj < PADJ_CUT &
                              ifelse(sign(shared$rna_log2FC) ==
                                       sign(shared$motif_delta_deviation),
                                     "Concordant", "Discordant"), "Other")
-shared$labelled <- FALSE
-shared$rank_score <- abs(shared$rna_log2FC * shared$motif_delta_deviation)
-for (category in c("Concordant", "Discordant")) {
-  ii <- which(shared$association == category)
-  ii <- ii[order(-shared$rank_score[ii])]
-  shared$labelled[head(ii, 6L)] <- TRUE
-}
-write.csv(shared[, setdiff(names(shared), "rank_score")],
+shared$labelled <- shared$association != "Other"
+write.csv(shared,
           file.path(table_dir, "09_RNA_x_motif.csv"), row.names = FALSE)
 p <- ggplot(shared, aes(rna_log2FC, motif_delta_deviation)) +
   geom_hline(yintercept = 0, linetype = 2, color = "grey60") +
@@ -155,11 +149,11 @@ p <- ggplot(shared, aes(rna_log2FC, motif_delta_deviation)) +
        color = "Direction",
        caption = paste0("One JASPAR motif per TF (lowest adjusted p value); ",
                         "colored points have both adjusted p values < ", PADJ_CUT,
-                        ". Labels: top 6 per direction by product of absolute effects.")) +
+                        ". All concordant and discordant TFs are labeled.")) +
   theme_classic(base_size = 11) +
   theme(legend.position = "bottom", plot.caption = element_text(size = 8))
 ggsave(file.path(FIG_DIR, "09_RNA_x_motif_logFC.pdf"), p,
-       width = 8, height = 6.5)
+       width = 11, height = 8)
 message("RNA x motif: ", nrow(shared), " shared TFs; ",
         sum(shared$labelled), " labels")
 
