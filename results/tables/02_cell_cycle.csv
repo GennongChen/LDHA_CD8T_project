@@ -1,0 +1,7 @@
+"Condition","Phase","Freq"
+"CTRL","G1",1961
+"OE","G1",1682
+"CTRL","G2M",332
+"OE","G2M",594
+"CTRL","S",804
+"OE","S",926
